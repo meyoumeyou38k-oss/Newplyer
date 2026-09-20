@@ -1,4 +1,4 @@
-Name: Build Lerza Player Android APK
+name: Build Lerza Player Android APK
 
 on:
   push:
