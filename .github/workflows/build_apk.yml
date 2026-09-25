@@ -2,10 +2,13 @@ name: Build Lerza Player Android APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [main, master]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [main, master]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,52 +18,88 @@ jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Auto Unzip ZIP Files If Present
-      - name: Auto Unzip ZIP Files If Present
+      - name: Extract uploaded project ZIP if present
+        shell: bash
         run: |
+          set -Eeuo pipefail
           shopt -s nullglob
-          zip_files=(*.zip)
-          if [ ${#zip_files[@]} -gt 0 ]; then
-            echo "ZIP file(s) found! Unzipping..."
-            for file in "${zip_files[@]}"; do
-              echo "Extracting $file..."
-              unzip -o "$file"
-            done
-            echo "Unzipping completed successfully."
-          else
-            echo "No ZIP files found. Proceeding with build..."
-          fi
+          zip_files=( *.zip )
+          for archive in "${zip_files[@]}"; do
+            echo "Extracting $archive"
+            unzip -o "$archive" -d "$GITHUB_WORKSPACE"
+          done
 
       - name: Set up Java JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-          cache: 'gradle'
+          cache: gradle
+          cache-dependency-path: '**/gradle/wrapper/gradle-wrapper.properties'
 
       - name: Accept Android SDK Licenses
+        shell: bash
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          set -o pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
 
-      - name: Ensure Executable Gradlew
+      - name: Locate project and prepare Gradle wrapper
+        id: prepare
+        shell: bash
         run: |
-          chmod +x gradlew
-          ls -la gradlew gradle/wrapper/
+          set -Eeuo pipefail
+
+          project_root="$GITHUB_WORKSPACE"
+          if [[ ! -f "$project_root/gradlew" ||
+                ! -f "$project_root/settings.gradle.kts" && ! -f "$project_root/settings.gradle" ||
+                ! -f "$project_root/app/build.gradle.kts" && ! -f "$project_root/app/build.gradle" ]]; then
+            wrapper_path="$(find "$GITHUB_WORKSPACE" -mindepth 2 -maxdepth 8 -type f -name gradlew -print -quit || true)"
+            if [[ -z "$wrapper_path" ]]; then
+              echo "::error::Could not find a Gradle Android project. Put gradlew, settings.gradle(.kts), and app/build.gradle(.kts) at the repository root, or keep them together in a subfolder."
+              find "$GITHUB_WORKSPACE" -maxdepth 5 -type f \( -name gradlew -o -name 'settings.gradle*' -o -name 'build.gradle*' \) -print | head -100
+              exit 1
+            fi
+            project_root="${wrapper_path%/gradlew}"
+          fi
+
+          if [[ ! -f "$project_root/gradle/wrapper/gradle-wrapper.properties" ]]; then
+            echo "::error::Gradle wrapper properties are missing from $project_root/gradle/wrapper."
+            exit 1
+          fi
+          if [[ ! -f "$project_root/gradle/wrapper/gradle-wrapper.jar" ]]; then
+            echo "::error::Gradle wrapper JAR is missing from $project_root/gradle/wrapper."
+            exit 1
+          fi
+
+          # Normalize CRLF without embedding a literal carriage-return in YAML.
+          sed -i 's/\r$//' "$project_root/gradlew"
+          chmod +x "$project_root/gradlew"
+          if ! sh -n "$project_root/gradlew"; then
+            echo "::error::The Gradle wrapper script has invalid shell syntax."
+            exit 1
+          fi
+          if [[ ! -x "$project_root/gradlew" ]]; then
+            echo "::error::Could not mark gradlew executable."
+            exit 1
+          fi
+
+          echo "Android project root: $project_root"
+          echo "project_dir=$project_root" >> "$GITHUB_OUTPUT"
 
       - name: Build Debug APK
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8 -Dkotlin.compiler.execution.strategy=in-process -Dkotlin.incremental=false"
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        working-directory: ${{ steps.prepare.outputs.project_dir }}
+        run: ./gradlew --no-daemon --stacktrace --max-workers=2 :app:assembleDebug
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Lerza-Player-v1.0.0-Debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ steps.prepare.outputs.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
