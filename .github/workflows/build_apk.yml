@@ -18,17 +18,16 @@ jobs:
 
       - name: Auto Unzip ZIP Files If Present & Fix Subfolders
         run: |
-          # 1. अगर ज़िप फाइल डायरेक्ट अपलोड हुई है तो उसे अनज़िप करें
           for zipfile in $(find . -maxdepth 2 -name "*.zip"); do
             echo "Unzipping $zipfile..."
             unzip -o "$zipfile" -d . || true
           done
 
-          # 2. अगर फाइलें किसी सब-फोल्डर में हैं तो उन्हें रूट पर ले आएं
-          if [ ! -f "gradlew" ] && [ ! -f "settings.gradle.kts" ]; then
-            SUBDIR=$(find . -maxdepth 3 -name "settings.gradle.kts" -exec dirname {} \; | head -n 1)
+          # अगर प्रोजेक्ट फाइलें किसी सब-फोल्डर में हैं तो उन्हें रूट पर लाएं
+          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
+            SUBDIR=$(find . -maxdepth 3 -name "settings.gradle*" -exec dirname {} \; | head -n 1)
             if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
-              echo "Project files found in $SUBDIR -> Moving to root..."
+              echo "Project found in $SUBDIR. Moving files to root..."
               cp -rn "$SUBDIR"/* . || cp -r "$SUBDIR"/* .
             fi
           fi
@@ -47,7 +46,7 @@ jobs:
           if [ -f "gradlew" ]; then
             chmod +x gradlew
           else
-            echo "gradlew not found, generating wrapper..."
+            echo "Generating gradle wrapper..."
             gradle wrapper || true
             chmod +x gradlew || true
           fi
@@ -55,15 +54,15 @@ jobs:
       - name: Build Debug APK
         run: |
           if [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            ./gradlew --no-daemon assembleDebug
+            ./gradlew assembleDebug --no-daemon
           else
             echo "Wrapper JAR not found, using system gradle..."
-            gradle --no-daemon assembleDebug
+            gradle assembleDebug --no-daemon
           fi
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Lerza-Player-debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: "**/build/outputs/apk/debug/*.apk"
           if-no-files-found: warn
