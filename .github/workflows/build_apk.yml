@@ -18,13 +18,13 @@ jobs:
 
       - name: Auto Unzip ZIP Files If Present & Fix Subfolders
         run: |
-          # 1. اگر زپ فائل ڈائریکٹ اپلوڈ ہوئی ہے تو اسے ان زپ کریں
+          # 1. अगर ज़िप फाइल डायरेक्ट अपलोड हुई है तो उसे अनज़िप करें
           for zipfile in $(find . -maxdepth 2 -name "*.zip"); do
             echo "Unzipping $zipfile..."
             unzip -o "$zipfile" -d . || true
           done
 
-          # 2. اگر فائلیں کسی سب فولڈر میں ہیں تو انہیں روٹ پر لے آئیں
+          # 2. अगर फाइलें किसी सब-फोल्डर में हैं तो उन्हें रूट पर ले आएं
           if [ ! -f "gradlew" ] && [ ! -f "settings.gradle.kts" ]; then
             SUBDIR=$(find . -maxdepth 3 -name "settings.gradle.kts" -exec dirname {} \; | head -n 1)
             if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
@@ -54,9 +54,10 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          if [ -f "gradlew" ]; then
+          if [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
             ./gradlew --no-daemon assembleDebug
           else
+            echo "Wrapper JAR not found, using system gradle..."
             gradle --no-daemon assembleDebug
           fi
 
