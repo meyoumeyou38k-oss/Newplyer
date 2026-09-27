@@ -18,17 +18,19 @@ jobs:
 
       - name: Auto Unzip ZIP Files If Present & Fix Subfolders
         run: |
-          for zipfile in $(find . -maxdepth 2 -name "*.zip"); do
+          # 1. अगर कोई Zip फाइल है तो उसे Unzip करें
+          for zipfile in $(find . -maxdepth 3 -name "*.zip"); do
             echo "Unzipping $zipfile..."
             unzip -o "$zipfile" -d . || true
           done
 
-          # अगर प्रोजेक्ट फाइलें किसी सब-फोल्डर में हैं तो उन्हें रूट पर लाएं
-          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
-            SUBDIR=$(find . -maxdepth 3 -name "settings.gradle*" -exec dirname {} \; | head -n 1)
-            if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
-              echo "Project found in $SUBDIR. Moving files to root..."
-              cp -rn "$SUBDIR"/* . || cp -r "$SUBDIR"/* .
+          # 2. अगर सब-फ़ोल्डर में प्रोजेक्ट है, तो सभी फाइलों को रूट पर लाएं
+          SETTINGS_FILE=$(find . -name "settings.gradle*" | head -n 1)
+          if [ -n "$SETTINGS_FILE" ]; then
+            SUBDIR=$(dirname "$SETTINGS_FILE")
+            if [ "$SUBDIR" != "." ]; then
+              echo "Moving files from $SUBDIR to root..."
+              cp -r $SUBDIR/. . || true
             fi
           fi
 
