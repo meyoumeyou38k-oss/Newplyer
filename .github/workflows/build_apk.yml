@@ -16,23 +16,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Auto Unzip ZIP Files If Present & Fix Subfolders
+      - name: Auto Unzip ZIP Files If Present
         run: |
-          # 1. अगर कोई Zip फाइल है तो उसे Unzip करें
           for zipfile in $(find . -maxdepth 3 -name "*.zip"); do
             echo "Unzipping $zipfile..."
             unzip -o "$zipfile" -d . || true
           done
-
-          # 2. अगर सब-फ़ोल्डर में प्रोजेक्ट है, तो सभी फाइलों को रूट पर लाएं
-          SETTINGS_FILE=$(find . -name "settings.gradle*" | head -n 1)
-          if [ -n "$SETTINGS_FILE" ]; then
-            SUBDIR=$(dirname "$SETTINGS_FILE")
-            if [ "$SUBDIR" != "." ]; then
-              echo "Moving files from $SUBDIR to root..."
-              cp -r $SUBDIR/. . || true
-            fi
-          fi
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -43,22 +32,24 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Ensure Executable Gradlew
+      - name: Find Project Root and Build APK
         run: |
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-          else
-            echo "Generating gradle wrapper..."
-            gradle wrapper || true
-            chmod +x gradlew || true
+          # 1. खोजें कि settings.gradle या build.gradle कहाँ स्थित है
+          BUILD_DIR=$(find . -name "settings.gradle*" -o -name "build.gradle*" | head -n 1 | xargs -r dirname)
+
+          if [ -z "$BUILD_DIR" ]; then
+            echo "Error: No Gradle build files found in repository!"
+            exit 1
           fi
 
-      - name: Build Debug APK
-        run: |
-          if [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+          echo "Found Gradle project in: $BUILD_DIR"
+          cd "$BUILD_DIR"
+
+          # 2. Executable permission दें अगर gradlew मौजूद हो
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
             ./gradlew assembleDebug --no-daemon
           else
-            echo "Wrapper JAR not found, using system gradle..."
             gradle assembleDebug --no-daemon
           fi
 
