@@ -32,6 +32,17 @@ jobs:
               unzip -o "$file"
             done
             echo "Unzipping completed successfully."
+            
+            # अगर ZIP अनज़िप होकर किसी सब-फ़ोल्डर में गया है, तो फाइलों को बाहर ले आएं
+            if [ ! -f "gradlew" ]; then
+              echo "Checking for nested project folder..."
+              NESTED_DIR=$(find . -maxdepth 2 -name "gradlew" -exec dirname {} \;)
+              if [ -n "$NESTED_DIR" ] && [ "$NESTED_DIR" != "." ]; then
+                echo "Moving project files from $NESTED_DIR to root..."
+                cp -rn $NESTED_DIR/* . 2>/dev/null || true
+                cp -rn $NESTED_DIR/.* . 2>/dev/null || true
+              fi
+            fi
           else
             echo "No ZIP files found. Proceeding with build..."
           fi
@@ -41,7 +52,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
       - name: Accept Android SDK Licenses
         run: |
@@ -50,7 +60,7 @@ jobs:
       - name: Ensure Executable Gradlew
         run: |
           chmod +x gradlew
-          ls -la gradlew gradle/wrapper/
+          ls -la gradlew gradle/wrapper/ || true
 
       - name: Build Debug APK
         env:
