@@ -57,10 +57,10 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8 -Dkotlin.compiler.execution.strategy=in-process -Dkotlin.incremental=false"
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Upload Debug APK Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lerza-Player-v1.0.0-Debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Lerza-Player-v1.0.0
+          path: '**/build/outputs/apk/**/*.apk'
           if-no-files-found: error
           retention-days: 30
