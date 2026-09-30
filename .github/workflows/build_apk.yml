@@ -33,7 +33,7 @@ jobs:
             done
             echo "Unzipping completed successfully."
             
-            # اگر ZIP انزپ ہو کر کسی سب فولڈر میں گیا ہے تو فائلوں کو باہر لے آئیں
+            # अगर ZIP अनज़िप होकर किसी सब-फ़ोल्डर में गया है तो फाइलों को रूट में ले आएँ
             if [ ! -f "gradlew" ]; then
               echo "Checking for nested project folder..."
               NESTED_DIR=$(find . -maxdepth 2 -name "gradlew" -exec dirname {} \;)
@@ -53,6 +53,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
+          cache-dependency-path: |
+            **/*.gradle*
+            **/gradle-wrapper.properties
 
       - name: Accept Android SDK Licenses
         run: |
