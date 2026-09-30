@@ -1,4 +1,4 @@
-Name: Build Lerza Player Android APK
+name: Build Lerza Player Android APK
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
             done
             echo "Unzipping completed successfully."
             
-            # अगर ZIP अनज़िप होकर किसी सब-फ़ोल्डर में गया है, तो फाइलों को बाहर ले आएं
+            # اگر ZIP انزپ ہو کر کسی سب فولڈر میں گیا ہے تو فائلوں کو باہر لے آئیں
             if [ ! -f "gradlew" ]; then
               echo "Checking for nested project folder..."
               NESTED_DIR=$(find . -maxdepth 2 -name "gradlew" -exec dirname {} \;)
@@ -69,6 +69,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           echo "Decoding release keystore..."
+          mkdir -p app
           echo "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
 
       # Build Signed Release APK
