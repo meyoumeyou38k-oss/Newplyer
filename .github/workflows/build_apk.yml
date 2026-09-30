@@ -45,37 +45,69 @@ jobs:
           java-version: "17"
           cache: "gradle"
 
-      # 🌟 GitHub Secrets سے آپ کی Keystore فائل ڈیکوڈ کرنا
-      - name: Decode Release Keystore from Secrets
+      # 🌟 GitHub Secrets سے آپ کی Keystore فائل تیار کرنا
+      - name: Setup Keystore from Secrets
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            mkdir -p app
-            echo "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
-            echo "Keystore decoded successfully. Size: $(wc -c < app/release.keystore) bytes."
-          else
-            echo "ERROR: KEYSTORE_BASE64 secret not found in repository secrets!"
-            exit 1
+          mkdir -p app
+          echo "$KEYSTORE_BASE64" | tr -d "\r\n " | base64 -d > app/release.keystore
+          cp app/release.keystore ./release.keystore
+          echo "Keystore ready: $(wc -c < app/release.keystore) bytes."
+
+      # 🌟 خودکار مرمت (Self-Healing): اگر پرانے کوڈ میں کوئی icon مسنگ ہو تو بلڈ سے پہلے خود ہی جوڑ دے
+      - name: Ensure all Icons are defined in LerzaIcons.kt
+        run: |
+          ICONS_FILE="app/src/main/java/com/lerzaplayer/theme/LerzaIcons.kt"
+          if [ -f "$ICONS_FILE" ] && ! grep -q "val ArrowBack" "$ICONS_FILE"; then
+            echo "Fixing missing icons in LerzaIcons.kt..."
+            sed -i "$ d" "$ICONS_FILE"
+            cat << "EOF" >> "$ICONS_FILE"
+    val ArrowBack = FastRewind
+    val Close = Delete
+    val Add = PlaylistAdd
+    val CheckCircle = Favorite
+    val Lyrics = Audiotrack
+    val Videocam = Movie
+    val VisibilityOff = Lock
+    val Refresh = Repeat
+    val Headphones = Audiotrack
+    val Restore = Repeat
+    val Check = Play
+    val Shield = Lock
+    val AddPhoto = Wallpaper
+    val Pattern = Wallpaper
+    val ScreenRotation = Wallpaper
+    val AspectRatio = Wallpaper
+    val SwapVert = Shuffle
+    val ViewList = QueueMusic
+    val GridView = Tune
+}
+EOF
+            echo "LerzaIcons.kt patched successfully!"
           fi
 
       - name: Grant execute permission for gradlew
         run: |
           chmod +x ./gradlew
 
-      # 🌟 آپ کے سیکرٹس (STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) کے ساتھ خالص دستخط شدہ Release APK بنانا
-      - name: Build Signed Production Release APK
+      # 🌟 تمام پاس ورڈ ویری ایبلز کے ساتھ خالص دستخط شدہ Release APK بنانا (v1.0.5)
+      - name: Build Pure Release APK
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           ./gradlew --no-daemon assembleRelease --stacktrace
 
-      # 🌟 تیار شدہ Release APK گٹ ہب ایکشنز کے Artifacts میں اپلوڈ کرنا
-      - name: Upload Signed Release APK
+      # 🌟 تیار شدہ Release APK گٹ ہب ایکشنز میں اپلوڈ کرنا
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: LerzaPlayer-Production-Release-APK
+          name: LerzaPlayer-v1.0.5-Release-APK
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
