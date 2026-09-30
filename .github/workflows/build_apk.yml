@@ -17,15 +17,22 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # 1. سورس کوڈ چیک آؤٹ
+      # 1. سورس کوڈ ریپوزٹری چیک آؤٹ
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. اگر زپ فائل اپلوڈ کی گئی ہے تو اسے خودکار ان-زپ کرنا
-      - name: Unpack uploaded ZIP project (if any)
+      # 2. جاوا 17 سیٹ اپ (بغیر کیشے کے تاکہ کوئی فائل مسنگ ایرر نہ آئے)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 3. اگر پروجیکٹ زپ فائل کی صورت میں ہے تو خودکار ان-زپ کرنا
+      - name: Extract Project ZIP (if uploaded)
         run: |
-          echo "Checking for any uploaded ZIP files..."
-          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" -not -path "*/.*" | head -n 1)
+          echo "Checking for uploaded project ZIP archive..."
+          ZIP_FILE=$(find . -maxdepth 2 -iname "*.zip" -not -path "*/.*" | head -n 1)
 
           if [ -n "$ZIP_FILE" ]; then
             echo "Found ZIP file: $ZIP_FILE"
@@ -33,19 +40,19 @@ jobs:
             mkdir -p ./_temp_extract
             unzip -q -o "$ZIP_FILE" -d ./_temp_extract
 
-            # زپ کے اندر گریڈل فائل ڈھونڈنا
+            # تلاش کریں کہ gradlew فائل کہاں ہے
             GRADLEW_FILE=$(find ./_temp_extract -name "gradlew" -type f | head -n 1)
 
             if [ -n "$GRADLEW_FILE" ]; then
               PROJECT_ROOT=$(dirname "$GRADLEW_FILE")
               echo "Found Android project root at: $PROJECT_ROOT"
 
-              # تمام فائلوں کو پروجیکٹ روٹ میں منتقل کرنا
+              # تمام فائلوں کو پروجیکٹ کے روٹ میں لے آئیں
               shopt -s dotglob
               cp -rf "$PROJECT_ROOT"/* .
               shopt -u dotglob
             else
-              echo "gradlew not in subfolder, copying all extracted files to root..."
+              echo "gradlew not in subfolder, copying all files to root..."
               shopt -s dotglob
               cp -rf ./_temp_extract/* .
               shopt -u dotglob
@@ -54,32 +61,32 @@ jobs:
             rm -rf ./_temp_extract
             echo "Project unpacked successfully!"
           else
-            echo "No ZIP file found. Project files already present in repository."
+            echo "No .zip file found in repository root. Using existing files."
           fi
 
-          echo "Directory structure check:"
+      # 4. چیک کرنا کہ پروجیکٹ کی فائلیں موجود ہیں یا نہیں
+      - name: Verify Android Project Structure
+        run: |
+          echo "Current directory contents:"
           ls -la
 
-      # 3. جاوا 17 سیٹ اپ
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
+          if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
+            echo "::error::No build.gradle or build.gradle.kts found in the repository!"
+            echo "Please make sure you have uploaded the source code ZIP file (e.g. DOC-20260930-WA0007.zip) and NOT an APK file."
+            exit 1
+          fi
 
-      # 4. gradlew کو ایگزیکیوٹ پرمیشن دینا
+      # 5. gradlew کو پرمیشن دینا
       - name: Make gradlew executable
         run: |
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
           else
             echo "Error: gradlew file not found in current directory!"
-            ls -la
             exit 1
           fi
 
-      # 5. گٹ ہب سیکرٹس سے کی اسٹور (release.keystore) ڈیکوڈ کرنا
+      # 6. گٹ ہب سیکرٹس سے کی اسٹور ڈیکوڈ کرنا
       - name: Decode Release Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -88,13 +95,13 @@ jobs:
             echo "Decoding release keystore..."
             mkdir -p app
             echo "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > app/release.keystore
-            cp app/release.keystore ./release.keystore
+            cp app/release.keystore ./release.keystore 2>/dev/null || true
             echo "Keystore successfully created at app/release.keystore ($(wc -c < app/release.keystore) bytes)"
           else
             echo "Notice: KEYSTORE_BASE64 secret is not set. Will proceed with debug build."
           fi
 
-      # 6. ریلیز اور ڈیبگ APK بلڈ کرنا
+      # 7. سائنڈ ریلیز اور ڈیبگ APK بلڈ کرنا
       - name: Build Android APK
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -114,13 +121,13 @@ jobs:
             ./gradlew assembleDebug --no-daemon --stacktrace
           fi
 
-      # 7. تیار شدہ APK فائلوں کی تصدیق
+      # 8. تیار شدہ APK فائلوں کی فہرست دکھانا
       - name: List Generated APKs
         run: |
           echo "Generated APK files:"
           find app/build/outputs/apk/ -type f -name "*.apk" -exec ls -lh {} +
 
-      # 8. گٹ ہب ایکشنز پر APK اپلوڈ کرنا
+      # 9. گٹ ہب ایکشنز پر APK اپلوڈ کرنا
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
