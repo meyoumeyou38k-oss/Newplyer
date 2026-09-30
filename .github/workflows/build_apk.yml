@@ -20,7 +20,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Auto Unzip ZIP Files If Present & Locate Project
+      # Auto Unzip ZIP Files If Present & Locate Project Files
       - name: Auto Unzip ZIP Files If Present
         run: |
           shopt -s nullglob
@@ -34,14 +34,21 @@ jobs:
             echo "Unzipping completed successfully."
           fi
 
-          # सब-फ़ोल्डर में छिपे प्रोजेक्ट की जांच और फाइलों को बाहर लाना
-          if [ ! -f "gradlew" ] && [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
-            echo "Searching for project root containing gradle files..."
-            FOUND_DIR=$(find . -mindepth 1 -name "build.gradle*" -o -name "gradlew" | head -n 1 | xargs -r dirname)
-            if [ -n "$FOUND_DIR" ] && [ "$FOUND_DIR" != "." ]; then
-              echo "Moving project files from $FOUND_DIR to workspace root..."
-              cp -rn "$FOUND_DIR"/* . 2>/dev/null || true
-              cp -rn "$FOUND_DIR"/.* . 2>/dev/null || true
+          # अगर रूट में build.gradle या settings.gradle न मिले, तो गहरे फ़ोल्डर्स में ढूँढकर रूट में लाएँ
+          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ] && [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
+            echo "Gradle build files not found in root. Searching in subdirectories..."
+            GRADLE_FILE=$(find . -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" -o -name "settings.gradle.kts" | head -n 1)
+            
+            if [ -n "$GRADLE_FILE" ]; then
+              TARGET_DIR=$(dirname "$GRADLE_FILE")
+              echo "Found Android project inside: $TARGET_DIR"
+              if [ "$TARGET_DIR" != "." ]; then
+                echo "Moving all project files from $TARGET_DIR to workspace root..."
+                cp -rn "$TARGET_DIR"/* . 2>/dev/null || true
+                cp -rn "$TARGET_DIR"/.* . 2>/dev/null || true
+              fi
+            else
+              echo "ERROR: No Gradle build files found anywhere in the repository!"
             fi
           fi
 
@@ -58,7 +65,7 @@ jobs:
       - name: Ensure Executable Gradlew
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "gradlew not found! Generating gradle wrapper..."
+            echo "gradlew not found in root! Installing Gradle wrapper..."
             gradle wrapper
           fi
           chmod +x gradlew
