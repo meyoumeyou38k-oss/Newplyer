@@ -1,4 +1,4 @@
-name: Android Build & APK Generator
+name: Android Release Build (Signed Production APK)
 
 on:
   push:
@@ -10,14 +10,14 @@ permissions:
   contents: read
 
 jobs:
-  build-apk:
+  build-release-apk:
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # 🌟 خود بخود زپ فائل تلاش کر کے ان زپ کرنا
+      # 🌟 اگر زپ فائل اپلوڈ کی گئی ہو تو خودکار طریقے سے ان زپ کرنا
       - name: Auto-extract project zip if uploaded
         run: |
           ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
@@ -26,7 +26,6 @@ jobs:
             mkdir -p ./unpacked_temp
             unzip -o "$ZIP_FILE" -d ./unpacked_temp/
 
-            # gradlew یا settings.gradle.kts کا فولڈر تلاش کریں
             PROJECT_ROOT=$(find ./unpacked_temp -name "settings.gradle.kts" -o -name "settings.gradle" -o -name "gradlew" | head -n 1 | xargs -r dirname)
             if [ -n "$PROJECT_ROOT" ]; then
               echo "Project located in: $PROJECT_ROOT. Moving files to repo root..."
@@ -36,7 +35,7 @@ jobs:
             rm -rf ./unpacked_temp
             echo "Extraction completed successfully."
           else
-            echo "No zip archive detected; working with repository files directly."
+            echo "Working with repository files directly."
           fi
 
       - name: Set up Java 17
@@ -46,33 +45,37 @@ jobs:
           java-version: "17"
           cache: "gradle"
 
-      # 🌟 Keystore سیکرٹ ہینڈلنگ (اگر آپ نے گٹ ہب میں سیکرٹس دیے ہوں)
-      - name: Setup Keystore from Secrets (if provided)
+      # 🌟 GitHub Secrets سے آپ کی Keystore فائل ڈیکوڈ کرنا
+      - name: Decode Release Keystore from Secrets
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 || secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Writing keystore to app/release.keystore..."
-            echo "$KEYSTORE_BASE64" | base64 -d > app/release.keystore
+            mkdir -p app
+            echo "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+            echo "Keystore decoded successfully. Size: $(wc -c < app/release.keystore) bytes."
           else
-            echo "No keystore secret provided. Debug signing fallback will be used."
+            echo "ERROR: KEYSTORE_BASE64 secret not found in repository secrets!"
+            exit 1
           fi
 
       - name: Grant execute permission for gradlew
         run: |
           chmod +x ./gradlew
 
-      - name: Build Android APK
+      # 🌟 آپ کے سیکرٹس (STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) کے ساتھ خالص دستخط شدہ Release APK بنانا
+      - name: Build Signed Production Release APK
         env:
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD || secrets.KEYSTORE_PASSWORD || 'android' }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS || secrets.KEY_ALIAS || 'androiddebugkey' }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.KEY_PASSWORD || 'android' }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew --no-daemon assembleDebug assembleRelease --stacktrace || ./gradlew --no-daemon assembleDebug --stacktrace
+          ./gradlew --no-daemon assembleRelease --stacktrace
 
-      - name: Upload APK Artifacts
+      # 🌟 تیار شدہ Release APK گٹ ہب ایکشنز کے Artifacts میں اپلوڈ کرنا
+      - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: LerzaPlayer-APKs
-          path: app/build/outputs/apk/**/*.apk
+          name: LerzaPlayer-Production-Release-APK
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
