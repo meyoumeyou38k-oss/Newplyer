@@ -20,7 +20,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Auto Unzip ZIP Files If Present
+      # Auto Unzip ZIP Files If Present & Locate Project
       - name: Auto Unzip ZIP Files If Present
         run: |
           shopt -s nullglob
@@ -32,19 +32,17 @@ jobs:
               unzip -o "$file"
             done
             echo "Unzipping completed successfully."
-            
-            # अगर ZIP अनज़िप होकर किसी सब-फ़ोल्डर में गया है तो फाइलों को रूट में ले आएँ
-            if [ ! -f "gradlew" ]; then
-              echo "Checking for nested project folder..."
-              NESTED_DIR=$(find . -maxdepth 2 -name "gradlew" -exec dirname {} \;)
-              if [ -n "$NESTED_DIR" ] && [ "$NESTED_DIR" != "." ]; then
-                echo "Moving project files from $NESTED_DIR to root..."
-                cp -rn $NESTED_DIR/* . 2>/dev/null || true
-                cp -rn $NESTED_DIR/.* . 2>/dev/null || true
-              fi
+          fi
+
+          # सब-फ़ोल्डर में छिपे प्रोजेक्ट की जांच और फाइलों को बाहर लाना
+          if [ ! -f "gradlew" ] && [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
+            echo "Searching for project root containing gradle files..."
+            FOUND_DIR=$(find . -mindepth 1 -name "build.gradle*" -o -name "gradlew" | head -n 1 | xargs -r dirname)
+            if [ -n "$FOUND_DIR" ] && [ "$FOUND_DIR" != "." ]; then
+              echo "Moving project files from $FOUND_DIR to workspace root..."
+              cp -rn "$FOUND_DIR"/* . 2>/dev/null || true
+              cp -rn "$FOUND_DIR"/.* . 2>/dev/null || true
             fi
-          else
-            echo "No ZIP files found. Proceeding with build..."
           fi
 
       - name: Set up Java JDK 17
@@ -59,6 +57,10 @@ jobs:
 
       - name: Ensure Executable Gradlew
         run: |
+          if [ ! -f "gradlew" ]; then
+            echo "gradlew not found! Generating gradle wrapper..."
+            gradle wrapper
+          fi
           chmod +x gradlew
           ls -la gradlew gradle/wrapper/ || true
 
