@@ -52,10 +52,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
-          cache-dependency-path: |
-            **/*.gradle*
-            **/gradle-wrapper.properties
 
       - name: Accept Android SDK Licenses
         run: |
